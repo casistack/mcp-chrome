@@ -76,11 +76,8 @@ export default defineConfig({
             src: ['workers/*'],
             dest: 'workers',
           },
-          {
-            src: '_locales/**/*',
-            dest: '_locales',
-          },
         ],
+        hook: 'writeBundle', // Copy files after build is complete
       }) as any,
     ],
     build: {

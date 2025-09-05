@@ -74,11 +74,16 @@ function broadcastServerStatusChange(status: ServerStatus): void {
  * Connect to the native messaging host
  */
 export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT) {
+  console.log('🔌 Attempting to connect to native host:', HOST_NAME, 'on port:', port);
+  console.log('🔌 Chrome extension ID:', chrome.runtime.id);
+
   if (nativePort) {
+    console.log('🔌 Native port already exists, skipping connection');
     return;
   }
 
   try {
+    console.log('🔌 Calling chrome.runtime.connectNative with host name:', HOST_NAME);
     nativePort = chrome.runtime.connectNative(HOST_NAME);
 
     nativePort.onMessage.addListener(async (message) => {
@@ -149,13 +154,17 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT) {
     });
 
     nativePort.onDisconnect.addListener(() => {
-      console.error(ERROR_MESSAGES.NATIVE_DISCONNECTED, chrome.runtime.lastError);
+      console.error('❌ Native connection disconnected:', chrome.runtime.lastError);
+      console.error('❌ Error details:', chrome.runtime.lastError?.message);
       nativePort = null;
     });
 
+    console.log('✅ Native port connected successfully');
+    console.log('🚀 Sending START message to native host with port:', port);
     nativePort.postMessage({ type: NativeMessageType.START, payload: { port } });
   } catch (error) {
-    console.error(ERROR_MESSAGES.NATIVE_CONNECTION_FAILED, error);
+    console.error('❌ Failed to connect to native host:', error);
+    console.error('❌ Host name attempted:', HOST_NAME);
   }
 }
 
