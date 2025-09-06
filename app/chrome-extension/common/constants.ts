@@ -22,6 +22,11 @@ export const TIMEOUTS = {
   SCREENSHOT_DELAY: 100,
   KEYBOARD_DELAY: 50,
   CLICK_DELAY: 100,
+  // Modal interaction timeouts
+  MODAL_DETECTION: 2000, // Time to wait for modal appearance after action
+  MODAL_INTERACTION: 30000, // Extended timeout when modal detected
+  MODAL_RETRY_DELAY: 1000, // Delay between retry attempts
+  MODAL_MAX_RETRIES: 3, // Maximum retry attempts
 } as const;
 
 // Limits and Thresholds
