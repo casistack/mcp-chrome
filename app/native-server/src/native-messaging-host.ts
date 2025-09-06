@@ -66,6 +66,9 @@ export class NativeMessagingHost {
   }
 
   private async handleMessage(message: any): Promise<void> {
+    // Debug: Log all received messages to stderr
+    console.error('DEBUG: Received message:', JSON.stringify(message));
+
     if (!message || typeof message !== 'object') {
       this.sendError('Invalid message format');
       return;
@@ -169,7 +172,6 @@ export class NativeMessagingHost {
         type: NativeMessageType.SERVER_STARTED,
         payload: { port },
       });
-
     } catch (error: any) {
       this.sendError(`Failed to start server: ${error.message}`);
     }
@@ -235,8 +237,6 @@ export class NativeMessagingHost {
       payload: { message: errorMessage },
     });
   }
-
-
 
   /**
    * Clean up resources

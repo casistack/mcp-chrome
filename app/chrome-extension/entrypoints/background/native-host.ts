@@ -161,7 +161,10 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT) {
 
     console.log('✅ Native port connected successfully');
     console.log('🚀 Sending START message to native host with port:', port);
-    nativePort.postMessage({ type: NativeMessageType.START, payload: { port } });
+    const message = { type: NativeMessageType.START, payload: { port } };
+    console.log('📤 Actual message being sent:', JSON.stringify(message));
+    console.log('🔍 NativeMessageType.START value:', NativeMessageType.START);
+    nativePort.postMessage(message);
   } catch (error) {
     console.error('❌ Failed to connect to native host:', error);
     console.error('❌ Host name attempted:', HOST_NAME);
