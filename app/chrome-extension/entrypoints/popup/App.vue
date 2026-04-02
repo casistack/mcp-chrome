@@ -68,44 +68,44 @@
           </div>
         </div>
 
-        <!-- 快捷工具卡片 -->
+        <!-- Quick Tools -->
         <div class="section">
-          <h2 class="section-title">快捷工具</h2>
+          <h2 class="section-title">Quick Tools</h2>
           <div class="rr-icon-buttons">
             <button
               class="rr-icon-btn rr-icon-btn-record rr-icon-btn-coming-soon has-tooltip"
               @click="startRecording"
-              data-tooltip="录制功能开发中"
+              data-tooltip="Recording (coming soon)"
             >
               <RecordIcon :recording="false" />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-stop rr-icon-btn-coming-soon has-tooltip"
               @click="stopRecording"
-              data-tooltip="录制功能开发中"
+              data-tooltip="Recording (coming soon)"
             >
               <StopIcon />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-edit has-tooltip"
               @click="toggleWebEditor"
-              data-tooltip="开启页面编辑模式"
+              data-tooltip="Toggle page edit mode"
             >
               <EditIcon />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-marker has-tooltip"
               @click="toggleElementMarker"
-              data-tooltip="开启元素标注"
+              data-tooltip="Toggle element markers"
             >
               <MarkerIcon />
             </button>
           </div>
         </div>
 
-        <!-- 管理入口卡片 -->
+        <!-- Management -->
         <div class="section">
-          <h2 class="section-title">管理入口</h2>
+          <h2 class="section-title">Management</h2>
           <div class="entry-card">
             <button class="entry-item" @click="openAgentSidepanel">
               <div class="entry-icon agent">
@@ -125,8 +125,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">智能助手</span>
-                <span class="entry-desc">AI Agent 对话与任务</span>
+                <span class="entry-title">AI Assistant</span>
+                <span class="entry-desc">AI Agent chat & tasks</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -146,10 +146,10 @@
               </div>
               <div class="entry-content">
                 <span class="entry-title">
-                  工作流管理
+                  Workflow Manager
                   <span class="coming-soon-badge">Coming Soon</span>
                 </span>
-                <span class="entry-desc">录制与回放自动化流程</span>
+                <span class="entry-desc">Record & replay automation flows</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -181,8 +181,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">元素标注管理</span>
-                <span class="entry-desc">管理页面元素标注</span>
+                <span class="entry-title">Element Markers</span>
+                <span class="entry-desc">Manage page element annotations</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -214,8 +214,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">本地模型</span>
-                <span class="entry-desc">语义引擎与模型管理</span>
+                <span class="entry-title">Local Models</span>
+                <span class="entry-desc">Semantic engine & model management</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -433,7 +433,7 @@ function isFlowBoundToCurrent(flow: any) {
 // 运行记录与覆盖项在侧边栏页面查看
 const startRecording = async () => {
   // TODO: 录制回放功能开发中，暂时拦截
-  showComingSoonToast('录制回放');
+  showComingSoonToast('Record & Replay');
   return;
   // if (rrRecording.value) return;
   // try {
@@ -450,7 +450,7 @@ const startRecording = async () => {
 
 const stopRecording = async () => {
   // TODO: 录制回放功能开发中，暂时拦截
-  showComingSoonToast('录制回放');
+  showComingSoonToast('Record & Replay');
   return;
   // if (!rrRecording.value) return;
   // try {
@@ -485,7 +485,7 @@ const runFlow = async (flowId: string) => {
       options: { ...runOptions, ...ov, returnLogs: true },
     });
     if (!(res && res.success)) {
-      console.warn('回放失败');
+      console.warn('Replay failed');
       return;
     }
     // If failed, open builder and focus the failed node
@@ -635,7 +635,7 @@ async function openSidepanelAndClose(tab: string) {
 // Open sidepanel from popup for workflow management
 function openWorkflowSidepanel() {
   // TODO: 工作流功能开发中，暂时拦截
-  showComingSoonToast('工作流管理');
+  showComingSoonToast('Workflow Manager');
   // openSidepanelAndClose('workflows');
 }
 
@@ -653,7 +653,7 @@ async function toggleWebEditor() {
   try {
     await chrome.runtime.sendMessage({ type: BACKGROUND_MESSAGE_TYPES.WEB_EDITOR_TOGGLE });
   } catch (error) {
-    console.warn('切换网页编辑模式失败:', error);
+    console.warn('Failed to toggle web editor mode:', error);
   }
 }
 
@@ -662,7 +662,7 @@ async function toggleElementMarker() {
     // 获取当前活动tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
-      console.warn('无法获取当前tab');
+      console.warn('Cannot get current tab');
       return;
     }
 
@@ -672,7 +672,7 @@ async function toggleElementMarker() {
       tabId: tab.id,
     });
   } catch (error) {
-    console.warn('开启元素标注失败:', error);
+    console.warn('Failed to toggle element markers:', error);
   }
 }
 
@@ -1065,7 +1065,7 @@ const testNativeConnection = async () => {
       await chrome.runtime.sendMessage({ type: 'disconnect_native' });
       nativeConnectionStatus.value = 'disconnected';
     } else {
-      console.log(`尝试连接到端口: ${nativeServerPort.value}`);
+      console.log(`Connecting to port: ${nativeServerPort.value}`);
       // eslint-disable-next-line no-undef
       const response = await chrome.runtime.sendMessage({
         type: 'connectNative',
@@ -1073,7 +1073,7 @@ const testNativeConnection = async () => {
       });
       if (response && response.success) {
         nativeConnectionStatus.value = 'connected';
-        console.log('连接成功:', response);
+        console.log('Connected:', response);
         await savePortPreference(nativeServerPort.value);
       } else {
         nativeConnectionStatus.value = 'disconnected';
@@ -1184,7 +1184,7 @@ const savePortPreference = async (port: number) => {
   try {
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ nativeServerPort: port });
-    console.log(`端口偏好已保存: ${port}`);
+    console.log(`Port preference saved: ${port}`);
   } catch (error) {
     console.error('保存端口偏好失败:', error);
   }
@@ -1196,7 +1196,7 @@ const loadPortPreference = async () => {
     const result = await chrome.storage.local.get(['nativeServerPort']);
     if (result.nativeServerPort) {
       nativeServerPort.value = result.nativeServerPort;
-      console.log(`端口偏好已加载: ${result.nativeServerPort}`);
+      console.log(`Port preference loaded: ${result.nativeServerPort}`);
     }
   } catch (error) {
     console.error('加载端口偏好失败:', error);
