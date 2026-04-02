@@ -116,10 +116,12 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
           };
         }
       } else {
-        element = document.querySelector(selector);
+        // Use robust element finding with fallback strategies
+        element = findElementRobustly(selector);
         if (!element) {
           return {
             error: `Element with selector "${selector}" not found`,
+            modalDetection: { modals: detectModalDialogs() },
           };
         }
 
@@ -197,15 +199,20 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
         navigationOccurred = await navigationPromise;
       }
 
+      // Detect any modals that appeared after clicking
+      const postClickModals = detectModalDialogs();
+
       return {
         success: true,
         message: 'Element clicked successfully',
         elementInfo,
         navigationOccurred,
+        ...(postClickModals.length > 0 ? { modalDetection: { modals: postClickModals } } : {}),
       };
     } catch (error) {
       return {
         error: `Error clicking element: ${error.message}`,
+        modalDetection: { modals: detectModalDialogs() },
       };
     }
   }
@@ -336,6 +343,67 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
     if (!elementAtPoint) return false;
 
     return element === elementAtPoint || element.contains(elementAtPoint);
+  }
+
+  /**
+   * Find element using robust fallback strategies via selector-utils
+   * Falls back to standard querySelector if selector-utils is not available
+   */
+  function findElementRobustly(selector, timeout = 5000) {
+    // Try selector-utils if available (handles colon-prefixed IDs, Gmail patterns, etc.)
+    if (window.__SELECTOR_UTILS__ && window.__SELECTOR_UTILS__.findElementRobustly) {
+      return window.__SELECTOR_UTILS__.findElementRobustly(selector, timeout);
+    }
+    // Fallback to standard querySelector
+    return document.querySelector(selector);
+  }
+
+  /**
+   * Detect modal dialogs on the page (Gmail confirmations, alerts, etc.)
+   */
+  function detectModalDialogs() {
+    const modals = [];
+    const modalSelectors = [
+      '[aria-modal="true"]',
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '.modal:not([style*="display: none"])',
+      '.modal-dialog',
+      '[class*="modal"][class*="open"]',
+      '[class*="dialog"][class*="open"]',
+      // Gmail-specific patterns
+      '[data-alertdialog]',
+      '.Kj-JD', // Gmail dialog class
+      '.aYE', // Gmail compose send confirmation
+    ];
+
+    for (const sel of modalSelectors) {
+      try {
+        const elements = document.querySelectorAll(sel);
+        for (const el of elements) {
+          if (!isElementVisible(el)) continue;
+          const buttons = [];
+          const btnElements = el.querySelectorAll('button, [role="button"], [tabindex="0"]');
+          for (const btn of btnElements) {
+            if (isElementVisible(btn)) {
+              buttons.push({
+                text: btn.textContent?.trim().substring(0, 50) || '',
+                selector: btn.id ? `#${btn.id}` : null,
+              });
+            }
+          }
+          modals.push({
+            type: el.getAttribute('role') || 'modal',
+            message: el.textContent?.trim().substring(0, 200) || '',
+            buttons,
+            selector: sel,
+          });
+        }
+      } catch (e) {
+        // Skip invalid selectors
+      }
+    }
+    return modals;
   }
 
   // Listen for messages from the extension

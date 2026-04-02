@@ -10,6 +10,11 @@ import {
   compressImage,
 } from '../../../../utils/image-utils';
 import { screenshotContextManager } from '@/utils/screenshot-context';
+import { SmartAutoMode } from '../../../../utils/smart-auto-mode';
+import {
+  ScreenshotConfigManager,
+  isLegacyParameterUsage,
+} from '../../../../utils/screenshot-config';
 
 // Screenshot-specific constants
 const SCREENSHOT_CONSTANTS = {
@@ -55,6 +60,66 @@ interface ScreenshotToolParams {
   fullPage?: boolean;
   savePng?: boolean;
   maxHeight?: number; // Maximum height to capture in pixels (for infinite scroll pages)
+
+  // Enhanced parameters (smart auto mode)
+  saveMode?: 'base64' | 'file' | 'auto';
+  fileFormat?: 'jpeg' | 'png' | 'webp';
+  compressionQuality?: number;
+  targetTokenBudget?: number;
+  maxInlineSize?: number;
+  includeThumbnail?: boolean;
+  includeAbsolutePath?: boolean;
+  returnPath?: boolean;
+  enableContentAnalysis?: boolean;
+  tags?: string[];
+  notes?: string;
+}
+
+// Rate limiter for Chrome screenshot API with retry logic
+class ScreenshotRateLimiter {
+  private static lastCaptureTime = 0;
+  private static readonly MIN_CAPTURE_INTERVAL_MS = 1000;
+  private static readonly MAX_RETRIES = 3;
+  private static readonly RETRY_BASE_DELAY_MS = 1000;
+
+  static async rateLimitedCapture(
+    windowId?: number,
+    options?: { format: 'png' | 'jpeg' },
+  ): Promise<string> {
+    const now = Date.now();
+    const timeSinceLastCapture = now - this.lastCaptureTime;
+
+    if (timeSinceLastCapture < this.MIN_CAPTURE_INTERVAL_MS) {
+      const waitTime = this.MIN_CAPTURE_INTERVAL_MS - timeSinceLastCapture;
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        this.lastCaptureTime = Date.now();
+        const result = windowId
+          ? await chrome.tabs.captureVisibleTab(windowId, options || { format: 'png' })
+          : await chrome.tabs.captureVisibleTab(options || { format: 'png' });
+        if (!result) throw new Error('captureVisibleTab returned empty result');
+        return result;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (
+          msg.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND') &&
+          attempt < this.MAX_RETRIES
+        ) {
+          const delay = this.RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          console.log(
+            `Screenshot rate limit hit, retrying in ${delay}ms (attempt ${attempt}/${this.MAX_RETRIES})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Screenshot capture failed after all retry attempts');
+  }
 }
 
 /** Page details returned by screenshot-helper content script */
@@ -246,7 +311,9 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
         } else {
           // Visible area only
           this.logInfo('Capturing visible area...');
-          finalImageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+          finalImageDataUrl = await ScreenshotRateLimiter.rateLimitedCapture(tab.windowId, {
+            format: 'png',
+          });
           finalImageWidthCss = pageDetails.viewportWidth;
           finalImageHeightCss = pageDetails.viewportHeight;
         }
@@ -257,6 +324,104 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
       }
 
       // 2. Process output
+      // Check if enhanced SmartAutoMode should be used
+      const useSmartMode =
+        args.saveMode === 'auto' ||
+        args.targetTokenBudget ||
+        args.enableContentAnalysis ||
+        (!args.storeBase64 &&
+          !args.savePng &&
+          args.saveMode !== 'base64' &&
+          args.saveMode !== 'file');
+      const isLegacy = isLegacyParameterUsage(args);
+
+      if (useSmartMode && !isLegacy) {
+        try {
+          const configManager = ScreenshotConfigManager.getInstance();
+          const normalizedParams = configManager.normalizeParams(args);
+          const smartAutoMode = new SmartAutoMode();
+          const smartResult = await smartAutoMode.executeAutoMode(finalImageDataUrl, {
+            url: tab.url || '',
+            title: tab.title,
+            selector: normalizedParams.selector,
+            width: normalizedParams.width,
+            height: normalizedParams.height,
+            saveMode: normalizedParams.saveMode,
+            fileFormat: normalizedParams.fileFormat,
+            compressionQuality: normalizedParams.compressionQuality,
+            targetTokenBudget: normalizedParams.targetTokenBudget,
+            enableContentAnalysis: true,
+            tags: [],
+            notes: '',
+            storeBase64: undefined,
+            savePng: undefined,
+          });
+
+          if (smartResult.success) {
+            // Update screenshot context before returning
+            try {
+              if (
+                typeof finalImageWidthCss === 'number' &&
+                typeof finalImageHeightCss === 'number'
+              ) {
+                const viewportWidth = pageDetails?.viewportWidth ?? finalImageWidthCss;
+                const viewportHeight = pageDetails?.viewportHeight ?? finalImageHeightCss;
+                let hostname = '';
+                try {
+                  hostname = tab.url ? new URL(tab.url).hostname : '';
+                } catch {
+                  /* ignore */
+                }
+                screenshotContextManager.setContext(tab.id!, {
+                  screenshotWidth: finalImageWidthCss,
+                  screenshotHeight: finalImageHeightCss,
+                  viewportWidth,
+                  viewportHeight,
+                  devicePixelRatio: pageDetails?.devicePixelRatio,
+                  hostname,
+                });
+              }
+            } catch (e) {
+              console.warn('Failed to set screenshot context:', e);
+            }
+
+            const responseData: any = {
+              success: true,
+              message: `Screenshot [${name}] captured successfully`,
+              tabId: tab.id,
+              url: tab.url,
+              name,
+              deliveryMode: smartResult.decision.mode,
+              confidence: smartResult.decision.confidence,
+              reasoning: smartResult.decision.reasoning,
+              suggestions: smartResult.suggestions,
+              warnings: smartResult.warnings,
+              qualityMetrics: smartResult.qualityMetrics,
+            };
+
+            if (smartResult.decision.mode === 'inline' && smartResult.inlineResult) {
+              responseData.base64Data = smartResult.inlineResult.base64Data;
+              responseData.mimeType = smartResult.inlineResult.mimeType;
+              responseData.actualTokens = smartResult.inlineResult.actualTokens;
+              responseData.compressionRatio = smartResult.inlineResult.compressionRatio;
+            } else if (smartResult.decision.mode === 'file' && smartResult.fileResult) {
+              responseData.fileSaved = true;
+              responseData.filePath = smartResult.fileResult.filePath;
+              responseData.fullPath = smartResult.fileResult.absolutePath;
+              responseData.fileSize = smartResult.fileResult.fileSize;
+              responseData.mimeType = smartResult.fileResult.mimeType;
+            }
+
+            return {
+              content: [{ type: 'text', text: JSON.stringify(responseData) }],
+              isError: false,
+            };
+          }
+        } catch (smartError) {
+          console.warn('SmartAutoMode failed, falling back to default handling:', smartError);
+        }
+      }
+
       // Update screenshot context for coordinate scaling by tools like chrome_computer
       try {
         if (typeof finalImageWidthCss === 'number' && typeof finalImageHeightCss === 'number') {
@@ -419,7 +584,9 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
     // Small delay to ensure element is fully rendered after scrollIntoView
     await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_CONSTANTS.SCRIPT_INIT_DELAY));
 
-    const visibleCaptureDataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' });
+    const visibleCaptureDataUrl = await ScreenshotRateLimiter.rateLimitedCapture(undefined, {
+      format: 'png',
+    });
     if (!visibleCaptureDataUrl) {
       throw new Error('Failed to capture visible tab for element cropping');
     }
@@ -490,7 +657,7 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
         setTimeout(resolve, SCREENSHOT_CONSTANTS.CAPTURE_STITCH_DELAY_MS),
       );
 
-      const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' });
+      const dataUrl = await ScreenshotRateLimiter.rateLimitedCapture(undefined, { format: 'png' });
       if (!dataUrl) throw new Error('captureVisibleTab returned empty during full page capture');
 
       const yOffsetPx = currentScrollYCss * dpr;

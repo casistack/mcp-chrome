@@ -1,4 +1,8 @@
-import { createErrorResponse, ToolResult } from '@/common/tool-handler';
+import {
+  createErrorResponse,
+  createModalAwareErrorResponse,
+  ToolResult,
+} from '@/common/tool-handler';
 import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { TOOL_MESSAGE_TYPES } from '@/common/message-types';
@@ -24,6 +28,10 @@ interface ClickToolParams {
   modifiers?: { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
   tabId?: number; // target existing tab id
   windowId?: number; // when no tabId, pick active tab from this window
+  // Modal handling parameters
+  modalTimeout?: number;
+  retryAttempts?: number;
+  waitForModal?: boolean;
 }
 
 /**
@@ -96,26 +104,44 @@ class ClickTool extends BaseBrowserToolExecutor {
         }
       }
 
-      await this.injectContentScript(tab.id, ['inject-scripts/click-helper.js']);
+      // Inject selector-utils for robust element finding, then click-helper
+      await this.injectContentScript(tab.id, [
+        'inject-scripts/selector-utils.js',
+        'inject-scripts/click-helper.js',
+      ]);
 
-      // Send click message to content script
-      const result = await this.sendMessageToTab(
-        tab.id,
-        {
-          action: TOOL_MESSAGE_TYPES.CLICK_ELEMENT,
-          selector: finalSelector,
-          coordinates,
-          ref: finalRef,
-          waitForNavigation,
-          timeout,
-          double: args.double === true,
-          button,
-          bubbles,
-          cancelable,
-          modifiers,
-        },
-        frameId,
-      );
+      const clickMessage = {
+        action: TOOL_MESSAGE_TYPES.CLICK_ELEMENT,
+        selector: finalSelector,
+        coordinates,
+        ref: finalRef,
+        waitForNavigation,
+        timeout,
+        double: args.double === true,
+        button,
+        bubbles,
+        cancelable,
+        modifiers,
+      };
+
+      // Use modal-aware execution if requested
+      const {
+        modalTimeout = TIMEOUTS.MODAL_INTERACTION,
+        retryAttempts = TIMEOUTS.MODAL_MAX_RETRIES,
+        waitForModal = false,
+      } = args;
+
+      let result: any;
+
+      if (waitForModal) {
+        result = await this.executeWithModalHandling(tab.id, clickMessage, frameId, {
+          modalTimeout,
+          retryAttempts,
+          waitForModal,
+        });
+      } else {
+        result = await this.sendMessageToTab(tab.id, clickMessage, frameId);
+      }
 
       // Determine actual click method used
       let clickMethod: string;
@@ -139,6 +165,7 @@ class ClickTool extends BaseBrowserToolExecutor {
               elementInfo: result.elementInfo,
               navigationOccurred: result.navigationOccurred,
               clickMethod,
+              ...(result.modalDetection ? { modalDetection: result.modalDetection } : {}),
             }),
           },
         ],
@@ -150,6 +177,46 @@ class ClickTool extends BaseBrowserToolExecutor {
         `Error performing click: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+  /**
+   * Execute a tab message with modal detection and retry logic
+   */
+  private async executeWithModalHandling(
+    tabId: number,
+    message: any,
+    frameId: number | undefined,
+    options: { modalTimeout: number; retryAttempts: number; waitForModal: boolean },
+  ): Promise<any> {
+    const { retryAttempts } = options;
+
+    for (let attempt = 1; attempt <= retryAttempts; attempt++) {
+      try {
+        const result = await this.sendMessageToTab(tabId, message, frameId);
+
+        // Check for modal detection in response
+        if (result && result.modalDetection && result.modalDetection.modals?.length > 0) {
+          console.log(`Modal detected after attempt ${attempt}:`, result.modalDetection);
+
+          if (attempt < retryAttempts) {
+            // Wait for modal to resolve before retrying
+            const delay = TIMEOUTS.MODAL_RETRY_DELAY * Math.pow(2, attempt - 1);
+            console.log(`Waiting ${delay}ms before retry attempt ${attempt + 1}...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+
+        return result;
+      } catch (error) {
+        if (attempt >= retryAttempts) throw error;
+
+        const delay = TIMEOUTS.MODAL_RETRY_DELAY * Math.pow(2, attempt - 1);
+        console.log(`Click attempt ${attempt} failed, retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    throw new Error(`Click failed after ${retryAttempts} attempts`);
   }
 }
 
@@ -164,6 +231,10 @@ interface FillToolParams {
   frameId?: number;
   tabId?: number; // target existing tab id
   windowId?: number; // when no tabId, pick active tab from this window
+  // Modal handling parameters
+  modalTimeout?: number;
+  retryAttempts?: number;
+  waitForModal?: boolean;
 }
 
 /**
@@ -226,7 +297,10 @@ class FillTool extends BaseBrowserToolExecutor {
         }
       }
 
-      await this.injectContentScript(tab.id, ['inject-scripts/fill-helper.js']);
+      await this.injectContentScript(tab.id, [
+        'inject-scripts/selector-utils.js',
+        'inject-scripts/fill-helper.js',
+      ]);
 
       // Send fill message to content script
       const result = await this.sendMessageToTab(

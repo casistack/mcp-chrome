@@ -30,7 +30,12 @@ if (window.__FILL_HELPER_INITIALIZED__) {
           };
         }
       } else {
-        element = document.querySelector(selector);
+        // Use robust element finding with fallback strategies
+        if (window.__SELECTOR_UTILS__ && window.__SELECTOR_UTILS__.findElementRobustly) {
+          element = window.__SELECTOR_UTILS__.findElementRobustly(selector);
+        } else {
+          element = document.querySelector(selector);
+        }
       }
       if (!element) {
         return {
@@ -65,6 +70,49 @@ if (window.__FILL_HELPER_INITIALIZED__) {
         return {
           error: `Element with selector "${selector}" is not visible`,
           elementInfo,
+        };
+      }
+
+      // Check for contenteditable elements (Gmail compose, rich text editors)
+      const isContentEditable =
+        element.isContentEditable ||
+        element.getAttribute('contenteditable') === 'true' ||
+        element.getAttribute('contenteditable') === '';
+
+      if (isContentEditable) {
+        element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        element.focus();
+
+        // Convert line breaks to HTML for rich text editors
+        const strValue = String(value);
+        const htmlContent = strValue.replace(/\n\n/g, '</div><div>').replace(/\n/g, '<br>');
+        element.innerHTML = `<div>${htmlContent}</div>`;
+
+        // Dispatch input events for React/Vue/Angular reactivity
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Move cursor to end
+        try {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } catch (e) {
+          // Cursor positioning is optional
+        }
+
+        return {
+          success: true,
+          message: 'Contenteditable element filled successfully',
+          elementInfo: {
+            ...elementInfo,
+            contenteditable: true,
+            valueLength: strValue.length,
+          },
         };
       }
 
