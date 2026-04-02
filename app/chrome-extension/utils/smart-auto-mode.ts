@@ -87,7 +87,7 @@ export interface SmartAutoModeResult {
   };
 
   // Manifest tracking
-  manifestEntry: ScreenshotManifestEntry;
+  manifestEntry?: ScreenshotManifestEntry;
 
   // User feedback
   suggestions: string[];
@@ -178,7 +178,7 @@ export class SmartAutoMode {
     // Phase 4: Execute chosen mode
     let inlineResult: SmartAutoModeResult['inlineResult'];
     let fileResult: SmartAutoModeResult['fileResult'];
-    let manifestEntry: ScreenshotManifestEntry;
+    let manifestEntry: ScreenshotManifestEntry | undefined;
 
     const manifestStart = Date.now();
 
@@ -210,6 +210,9 @@ export class SmartAutoMode {
             errorCode: 'INLINE_CREATION_FAILED',
             errorMessage: `Failed to create inline result: ${errorMessage}`,
             decision,
+            manifestEntry: undefined,
+            suggestions,
+            warnings,
             qualityMetrics: { compressionQuality: 0, visualQuality: 0, efficiencyScore: 0 },
           };
         }
@@ -237,6 +240,9 @@ export class SmartAutoMode {
           errorCode: 'FILE_CREATION_FAILED',
           errorMessage: `Failed to create file result: ${error instanceof Error ? error.message : 'Unknown error'}`,
           decision,
+          manifestEntry: undefined,
+          suggestions,
+          warnings,
           qualityMetrics: { compressionQuality: 0, visualQuality: 0, efficiencyScore: 0 },
         };
       }
@@ -249,6 +255,9 @@ export class SmartAutoMode {
         errorCode: 'NO_VALID_RESULT',
         errorMessage: 'Failed to generate either inline or file result',
         decision,
+        manifestEntry: undefined,
+        suggestions,
+        warnings,
         qualityMetrics: { compressionQuality: 0, visualQuality: 0, efficiencyScore: 0 },
       };
     }

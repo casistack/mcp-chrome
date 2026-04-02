@@ -186,10 +186,14 @@ export class AdaptiveCompressor {
       const attemptStart = Date.now();
 
       try {
+        const compressFormat =
+          candidate.format === 'png'
+            ? 'image/webp'
+            : (`image/${candidate.format}` as 'image/jpeg' | 'image/webp');
         const compressed = await compressImage(imageDataUrl, {
           scale: candidate.scale,
           quality: candidate.quality,
-          format: `image/${candidate.format}`,
+          format: compressFormat,
         });
 
         const base64Data = compressed.dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
