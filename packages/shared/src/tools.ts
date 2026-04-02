@@ -931,6 +931,21 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'number',
           description: 'Target frame ID for iframe support.',
         },
+        modalTimeout: {
+          type: 'number',
+          description:
+            'Extended timeout in ms when modal dialog is detected (default: 30000). Helps with pages that show confirmation dialogs.',
+        },
+        retryAttempts: {
+          type: 'number',
+          description:
+            'Number of retry attempts if click fails due to modal or element state (default: 3).',
+        },
+        waitForModal: {
+          type: 'boolean',
+          description:
+            'Wait for and detect modal dialogs after clicking (default: false). Useful for Gmail and SPAs that show confirmation dialogs.',
+        },
       },
       required: [],
     },
@@ -971,6 +986,19 @@ export const TOOL_SCHEMAS: Tool[] = [
         frameId: {
           type: 'number',
           description: 'Target frame ID for iframe support.',
+        },
+        modalTimeout: {
+          type: 'number',
+          description: 'Extended timeout in ms when modal dialog is detected (default: 30000).',
+        },
+        retryAttempts: {
+          type: 'number',
+          description:
+            'Number of retry attempts if fill fails due to modal or element state (default: 3).',
+        },
+        waitForModal: {
+          type: 'boolean',
+          description: 'Wait for and detect modal dialogs after filling (default: false).',
         },
       },
       required: ['value'],
